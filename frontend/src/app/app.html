@@ -1,0 +1,337 @@
+<div class="production-container">
+  <!-- TOP ENTERPRISE NAVBAR -->
+  <header class="navbar">
+    <div class="nav-brand">
+      <div class="brand-logo">
+        <span class="logo-emoji">🌾</span>
+        <span class="logo-pulse"></span>
+      </div>
+      <div class="brand-text">
+        <div class="brand-title-row">
+          <h1>Sanjivani Sugar Factory</h1>
+          <span class="enterprise-tag">AI Enterprise</span>
+        </div>
+        <p class="brand-tagline">Autonomous Sugarcane Supply & Payment Intelligence System</p>
+      </div>
+    </div>
+
+    <!-- LIVE CONNECTIVITY PILLS -->
+    <div class="nav-status-group">
+      <div class="pill" [class.pill-active]="backendOnline()" [class.pill-danger]="!backendOnline()">
+        <span class="dot"></span>
+        <span>API: {{ backendOnline() ? 'Connected (:3001)' : 'Offline' }}</span>
+      </div>
+
+      <div class="pill" [class.pill-active]="mcpStatus()?.mcpConnected">
+        <span class="dot"></span>
+        <span>MCP Server: {{ mcpStatus()?.mcpConnected ? 'Active' : 'Standby' }}</span>
+      </div>
+
+      <div class="pill pill-mcp-tool" *ngIf="mcpStatus()?.tools?.length">
+        <span class="tool-icon">⚡</span>
+        <span>Tool: {{ mcpStatus()?.tools?.[0] }}</span>
+      </div>
+
+      <button class="nav-refresh-btn" (click)="checkHealth(); fetchFarmers()" title="Refresh live records">
+        <svg class="refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+        </svg>
+        <span>Sync</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN VIEWPORT -->
+  <main class="dashboard-body">
+    
+    <!-- KPI METRICS BANNER -->
+    <section class="metrics-row">
+      <div class="metric-card supply-tone">
+        <div class="metric-icon-bg">
+          <span>🌾</span>
+        </div>
+        <div class="metric-content">
+          <span class="metric-label">Sugarcane Intake</span>
+          <div class="metric-number">
+            {{ totalTons() | number:'1.2-2' }} <span class="metric-unit">Tons</span>
+          </div>
+          <span class="metric-sub">Sanjivani Factory Weighbridge</span>
+        </div>
+      </div>
+
+      <div class="metric-card paid-tone">
+        <div class="metric-icon-bg">
+          <span>💳</span>
+        </div>
+        <div class="metric-content">
+          <span class="metric-label">Disbursed Payments</span>
+          <div class="metric-number">{{ formatCurrency(totalPaid()) }}</div>
+          <span class="metric-sub">Transferred to farmer accounts</span>
+        </div>
+      </div>
+
+      <div class="metric-card pending-tone">
+        <div class="metric-icon-bg">
+          <span>⏳</span>
+        </div>
+        <div class="metric-content">
+          <span class="metric-label">Pending Settlements</span>
+          <div class="metric-number pending-highlight">{{ formatCurrency(totalPending()) }}</div>
+          <span class="metric-sub">Awaiting bank clearance</span>
+        </div>
+      </div>
+
+      <div class="metric-card farmer-tone">
+        <div class="metric-icon-bg">
+          <span>🚜</span>
+        </div>
+        <div class="metric-content">
+          <span class="metric-label">Registered Suppliers</span>
+          <div class="metric-number">{{ farmers().length }} <span class="metric-unit">Farmers</span></div>
+          <span class="metric-sub">Across {{ villages().length }} regional villages</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- CORE WORKSPACE DUAL PANELS -->
+    <div class="workspace-layout">
+
+      <!-- LEFT PANEL: AI COPILOT (MCP + OPENAI) -->
+      <section class="panel copilot-panel">
+        <div class="panel-header">
+          <div class="header-identity">
+            <span class="panel-icon">🤖</span>
+            <div>
+              <h2>AI Intelligence Copilot</h2>
+              <p class="panel-sub">Model Context Protocol (MCP) + OpenAI GPT-4o-mini</p>
+            </div>
+          </div>
+          <div class="mcp-badge">MCP Enabled</div>
+        </div>
+
+        <!-- QUICK PROMPT CHIPS -->
+        <div class="prompt-chips-wrapper">
+          <span class="chips-label">Quick Prompts:</span>
+          <div class="chips-list">
+            @for (prompt of presetQuestions; track prompt) {
+              <button class="prompt-chip" (click)="setQuestion(prompt); askAI()">
+                {{ prompt }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <!-- INPUT QUERY BOX -->
+        <div class="chat-input-area">
+          <div class="input-glow-wrapper">
+            <textarea
+              class="copilot-input"
+              rows="3"
+              [(ngModel)]="question"
+              placeholder="Ask any question about sugarcane supply, farmer payments, or village statistics..."
+              (keydown.enter)="$event.preventDefault(); askAI()">
+            </textarea>
+            
+            <div class="input-bottom-bar">
+              <span class="shortcut-hint">Press Enter or click Ask</span>
+              <button class="submit-btn" [disabled]="isAsking() || !question().trim()" (click)="askAI()">
+                @if (isAsking()) {
+                  <span class="loading-ring"></span>
+                  <span>Querying MCP & AI...</span>
+                } @else {
+                  <span>Ask Copilot 🚀</span>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- MESSAGES FEED -->
+        <div class="conversation-feed">
+          @if (chatHistory().length === 0) {
+            <div class="placeholder-state">
+              <div class="placeholder-icon">💬</div>
+              <h3>Ready to analyze sugarcane data</h3>
+              <p>
+                Click any of the quick prompt chips above or type a custom question. 
+                OpenAI will autonomously invoke the MCP tool <code>get_sanjivani_farmers</code> to pull live records from PostgreSQL.
+              </p>
+            </div>
+          }
+
+          @for (msg of chatHistory(); track msg.id) {
+            <div class="chat-row" [class.chat-row-user]="msg.sender === 'user'" [class.chat-row-ai]="msg.sender === 'assistant'">
+              <div class="sender-avatar">
+                {{ msg.sender === 'user' ? '👤' : '🌾' }}
+              </div>
+              
+              <div class="chat-bubble">
+                <div class="bubble-meta">
+                  <span class="sender-name">{{ msg.sender === 'user' ? 'You' : 'Sanjivani AI Assistant' }}</span>
+                  <span class="message-time">{{ msg.timestamp | date:'shortTime' }}</span>
+                </div>
+
+                <!-- MCP TECHNICAL EXECUTION TRACE (Collapsible for Clean Look) -->
+                @if (msg.toolCalls && msg.toolCalls.length > 0) {
+                  <div class="mcp-execution-strip">
+                    <div class="strip-header" (click)="toggleTrace(msg.id)">
+                      <div class="strip-left">
+                        <span class="mcp-indicator">⚡ MCP PROTOCOL EXECUTED</span>
+                        <code class="tool-name">{{ msg.toolCalls[0].name }}</code>
+                      </div>
+                      <button class="strip-expand-btn">
+                        {{ expandedTraceId() === msg.id ? 'Hide Details ▲' : 'Inspect Protocol Payload ▼' }}
+                      </button>
+                    </div>
+
+                    @if (expandedTraceId() === msg.id) {
+                      <div class="strip-content">
+                        <div class="payload-block">
+                          <span class="payload-title">Tool Input Arguments:</span>
+                          <pre class="code-box">{{ msg.toolCalls[0].arguments | json }}</pre>
+                        </div>
+                        <div class="payload-block">
+                          <span class="payload-title">PostgreSQL Data Returned:</span>
+                          <pre class="code-box db-result">{{ msg.toolCalls[0].result | json }}</pre>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+
+                <!-- RICH FORMATTED MARKDOWN (No raw # or * characters!) -->
+                <div class="formatted-markdown-body" [innerHTML]="formatMarkdown(msg.text)"></div>
+              </div>
+            </div>
+          }
+        </div>
+      </section>
+
+      <!-- RIGHT PANEL: LIVE FARMER DIRECTORY -->
+      <section class="panel directory-panel">
+        <div class="panel-header">
+          <div class="header-identity">
+            <span class="panel-icon">📋</span>
+            <div>
+              <h2>Farmer Supply Directory</h2>
+              <p class="panel-sub">Live records from PostgreSQL database (<code>sanjivani_db</code>)</p>
+            </div>
+          </div>
+          <span class="pill-counter">{{ filteredFarmers().length }} of {{ farmers().length }} Records</span>
+        </div>
+
+        <!-- SEARCH AND QUICK FILTER CONTROLS -->
+        <div class="directory-filter-bar">
+          <div class="search-box">
+            <span class="search-symbol">🔍</span>
+            <input
+              type="text"
+              class="search-field"
+              [(ngModel)]="searchQuery"
+              placeholder="Search by name or village..." />
+            @if (searchQuery()) {
+              <button class="clear-search" (click)="searchQuery.set('')">✕</button>
+            }
+          </div>
+        </div>
+
+        <!-- VILLAGE PILL TABS -->
+        <div class="village-pills-slider">
+          <button
+            class="village-tab"
+            [class.active-tab]="selectedVillage() === 'ALL'"
+            (click)="selectVillage('ALL')">
+            All Villages
+          </button>
+          @for (village of villages(); track village) {
+            <button
+              class="village-tab"
+              [class.active-tab]="selectedVillage() === village"
+              (click)="selectVillage(village)">
+              {{ village }}
+            </button>
+          }
+        </div>
+
+        <!-- ERROR ALERT IF ANY -->
+        @if (errorMessage()) {
+          <div class="status-alert error-alert">
+            ⚠️ {{ errorMessage() }}
+          </div>
+        }
+
+        <!-- PRODUCTION DATA TABLE -->
+        <div class="table-scroll-wrap">
+          <table class="enterprise-table">
+            <thead>
+              <tr>
+                <th>Farmer</th>
+                <th>Village</th>
+                <th>Supply</th>
+                <th>Amount Paid</th>
+                <th>Pending Dues</th>
+                <th class="text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (farmer of filteredFarmers(); track farmer.id) {
+                <tr class="table-row">
+                  <!-- Farmer column with avatar -->
+                  <td>
+                    <div class="farmer-cell">
+                      <div class="avatar-circle">{{ getInitials(farmer.name) }}</div>
+                      <div class="farmer-info">
+                        <span class="farmer-name">{{ farmer.name }}</span>
+                        <span class="farmer-id">ID #{{ farmer.id }}</span>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- Village -->
+                  <td>
+                    <span class="location-badge">📍 {{ farmer.village }}</span>
+                  </td>
+
+                  <!-- Supply Tonnage -->
+                  <td>
+                    <span class="supply-tag">{{ farmer.sugarcane_supply_tons }} Tons</span>
+                  </td>
+
+                  <!-- Amount Paid -->
+                  <td class="num-cell">{{ formatCurrency(farmer.amount_paid) }}</td>
+
+                  <!-- Pending Dues with alert styling -->
+                  <td>
+                    <span
+                      class="status-chip"
+                      [class.chip-danger]="+farmer.payment_pending > 50000"
+                      [class.chip-warning]="+farmer.payment_pending <= 50000">
+                      {{ formatCurrency(farmer.payment_pending) }}
+                    </span>
+                  </td>
+
+                  <!-- Action Button -->
+                  <td class="text-right">
+                    <button class="row-query-btn" (click)="askAboutFarmer(farmer)" title="Ask AI about this farmer">
+                      <span>Ask AI</span>
+                      <span class="btn-arrow">→</span>
+                    </button>
+                  </td>
+                </tr>
+              }
+
+              @if (filteredFarmers().length === 0 && !loadingFarmers()) {
+                <tr>
+                  <td colspan="6" class="empty-table-cell">
+                    No farmer records match your search criteria.
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
